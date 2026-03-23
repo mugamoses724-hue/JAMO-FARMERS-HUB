@@ -1,0 +1,5 @@
+{
+  "name": "JAMO – Joint Agriculture Management Organization",
+  "description": "A Uganda-based agricultural platform supporting farmers with weather updates, market prices, land registry, and service applications.",
+  "requestFramePermissions": ["camera", "geolocation"]
+}

@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Fields: uid, fullName, phoneNumber, nationalId, gender, region, role, status, profilePhotoUrl, createdAt
+    //
+    // Collection: land_records
+    // Fields: farmerUid, size, location, farmingType, crops, documentUrl, status, createdAt
+    //
+    // Collection: market_prices
+    // Fields: crop, region, priceLocal, priceRegional, priceInternational, updatedAt
+    //
+    // Collection: services
+    // Fields: name, description, category, icon
+    //
+    // Collection: applications
+    // Fields: farmerUid, serviceId, status, notes, createdAt
+    //
+    // Collection: payments
+    // Fields: farmerUid, amount, currency, method, transactionId, status, purpose, createdAt
+    //
+    // Collection: messages
+    // Fields: senderUid, receiverUid, text, read, createdAt
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "mugamoses724@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isFarmer() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'farmer';
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'fullName', 'role', 'status']) &&
+             data.uid is string &&
+             data.fullName is string && data.fullName.size() < 100 &&
+             data.role in ['farmer', 'admin', 'staff'] &&
+             data.status in ['pending', 'verified', 'rejected'];
+    }
+
+    function isValidLandRecord(data) {
+      return data.keys().hasAll(['farmerUid', 'size', 'location', 'status']) &&
+             data.farmerUid is string &&
+             data.size is number &&
+             data.location is string &&
+             data.status in ['pending', 'verified', 'rejected'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'farmer' || isAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /land_records/{recordId} {
+      allow read: if isAuthenticated() && (resource.data.farmerUid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.farmerUid == request.auth.uid && isValidLandRecord(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.farmerUid == request.auth.uid || isAdmin()) && isValidLandRecord(request.resource.data);
+    }
+
+    match /market_prices/{priceId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /services/{serviceId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /applications/{appId} {
+      allow read: if isAuthenticated() && (resource.data.farmerUid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.farmerUid == request.auth.uid;
+      allow update: if isAdmin();
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (resource.data.farmerUid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.farmerUid == request.auth.uid;
+      allow update: if isAdmin();
+    }
+
+    match /messages/{msgId} {
+      allow read: if isAuthenticated() && (resource.data.senderUid == request.auth.uid || resource.data.receiverUid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.senderUid == request.auth.uid;
+    }
+    
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
